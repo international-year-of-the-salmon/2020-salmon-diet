@@ -1,0 +1,186 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+library(tidyverse)
+library(lubridate)
+library(worrms)
+library(dplyr)
+library(obistools)
+library(readxl)
+library(parsedate)
+library(googledrive)
+library(here)
+```
+
+Download the file from the Google Drive folder and read-in:
+
+```{r file download, eval = FALSE}
+drive_download("https://docs.google.com/spreadsheets/d/1ftZOfDo6ApKWiLeo_qe8_9HayqC-biKo/edit#gid=154249752", path = here("original_data", "IYS2020_Salmon_Diet.xlsx"), overwrite = TRUE)
+
+salmondiet2020 <- read_excel(here("original_data", "IYS2020_Salmon_Diet.xlsx"), sheet = "2020-GoA_Feeding")
+```
+
+First, let's transcribe the 2020 salmon diet data to the 2022 Data Template:
+
+[ ] TO DO: Figure out which stations from GoA2019 and 2020 overlap with zone 4 (the zone that the Shimada covered in 2022), and which stations overlap with zone 3 (the zone that the Franklin and Raw Spirit covered), following the map on the bottom of this webpage: https://yearofthesalmon.org/2022expedition/ 
+
+```{r event core, eval = FALSE}
+event <- salmondiet2020 %>%
+  mutate(project = "IYS",
+         cruise = paste(project, "GoA2020", sep = ":"),
+         station = paste(cruise, Trawl, sep = ":Stn"),
+         eventID = paste(station, "trawl", sep = ":")) %>%
+  mutate(eventDate = `Date/time (UTC)`) %>%
+  mutate(eventDate = gsub(" ", "T", eventDate)) %>%
+  mutate(eventDate = paste0(eventDate, "Z")) %>%
+  dplyr::rename(decimalLatitude = Y,
+                decimalLongitude = X)
+
+event$Year <- as.numeric(format(as.Date(event$eventDate), "%Y"))
+event$Month <- as.numeric(format(as.Date(event$eventDate), "%m"))
+event$Day <- as.numeric(format(as.Date(event$eventDate), "%d"))
+
+event <- event %>%
+  mutate(footprintWKT = paste("POINT", " (", event$decimalLongitude, " ", event$decimalLatitude, ")")) 
+
+coordinates <- obistools::calculate_centroid(event$footprintWKT) %>% select(coordinateUncertaintyInMeters)
+
+event <- cbind(event, coordinates) 
+
+salmondiet2020_event <- event %>%
+  select(eventID, eventDate, Year, Month, Day, footprintWKT, coordinateUncertaintyInMeters,
+         decimalLatitude, decimalLongitude) %>%
+  mutate(geodeticDatum = "WGS84")
+
+write_csv(event, here("standardized_data", "SalmonDiet2020_event.csv"))
+```
+
+First, we create a table for the predator records (salmon). We will create pred_ids as at some stations there are multiple records of a single species. The difference in these records is the size of the salmon, which are grouped by 10cm size class. Each salmon record within a station will have a unique number attached to it. 
+
+``` {r predator occurrence, eval = FALSE}
+predator <- event %>%
+  dplyr::rename(pred_id = Sample,
+                predator = `Species (consumer)`)
+
+predator_taxa <- worrms::wm_records_names(unique(predator$predator)) %>% bind_rows()
+
+# Fix slight misspelling:
+predator$predator <- gsub("Oncorhynchus tschawytscha", "Oncorhynchus tshawytscha", predator$predator) 
+
+predator_occ <- predator %>%
+  select(eventID, predator, `Stomachs analyzed`, pred_id) %>%
+  rename(scientificname = predator) %>%
+  mutate(occurrenceStatus = "present",
+         occurrenceID = paste(eventID, pred_id, sep = ":"),
+         occurrenceID = paste(occurrenceID, "p", sep = "-"))
+
+predator_occ <- left_join(predator_occ, predator_taxa, by = "scientificname") %>%
+  rename(scientificName = scientificname,
+         scientificNameID = lsid,
+         organismQuantity = `Stomachs analyzed`,
+         scientificNameAuthorship = authority,
+         taxonomicStatus = status,
+         taxonomicRank = rank) %>%
+  mutate(basisOfRecord = "HumanObservation",
+         organismQuantityType = "Number of stomachs analyzed",
+         specificEpithet = stringr::word(predator_occ$scientificname, 2)) %>%
+  select(eventID, occurrenceID, occurrenceStatus, organismQuantity, organismQuantityType, scientificName, scientificNameID,
+         scientificNameAuthorship, taxonomicStatus, taxonomicRank, kingdom, phylum, class, order, family, genus, specificEpithet,
+         basisOfRecord) %>%
+  distinct()
+```
+
+Next, we create an occurrence table for the prey species (stomach content). As all the prey species are listed as columns, we first have to investigate all the unique prey species consumed, as these will get their associated WoRMS URN. The column `digested_food` is prey species that are unidentified and these will be classified as `Animalia`. As there are often multiple species found within the stomach content of a species, we assign these unique identifiers as well (prey_id). They will eventually be linked to the salmon record (with its own unique pred_id):
+
+``` {r prey_occurrence, eval = FALSE}
+prey <- predator %>%
+  rename(scientific_name = `Prey name`)
+
+for(i in unique(prey$pred_id)) {
+  prey$prey_id[prey$pred_id == i] <- seq_len(sum(prey$pred_id == i))
+}
+
+prey$prey_id <- paste0("pr", prey$prey_id)
+
+# Records that contain .sp or gen. sp.  will need an identificationQualifier before having this removed from the record:
+prey$identificationQualifier <- ifelse(grepl(" sp.|gen. sp.", prey$scientific_name), "sp. indet.", NA)
+prey$scientific_name <- gsub("\\b sp.\\b|\\b gen. sp.\\b", "", prey$scientific_name)
+
+worms_id <- worrms::wm_records_names(unique(prey$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows()%>% rename(scientific_name = scientificname)
+
+no_worms_id <- left_join(prey, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
+
+# What to do with 'пустой желудок' (empty stomach) and 'digested food' (=Animalia)?
+
+# These species will need to have their names changed in the original dataframe (bongo2020_abun) which we'll do below. I write this out so it is clear which names or species observations have been altered, so this can be verified. 
+prey$scientific_name <- gsub("Hyperia medusarium", "Hyperia medusarum", prey$scientific_name)
+prey$scientific_name <- gsub("Oikopleura labradoriensis", "Oikopleura (Vexillaria) labradoriensis", prey$scientific_name)
+prey$scientific_name <- gsub("copepoda", "Copepoda", prey$scientific_name)
+prey$scientific_name <- gsub("Larvae pisces", "Pisces", prey$scientific_name)
+prey$scientific_name <- gsub("Ova pisces", "Pisces", prey$scientific_name)
+prey$scientific_name <- gsub("Pisces p/p", "Pisces", prey$scientific_name)
+prey$scientific_name <- gsub("Zoea brachyura", "Brachyura", prey$scientific_name)
+prey$scientific_name <- gsub("Gonatidae gen. sp. (мол.)", "Gonatidae", prey$scientific_name)
+prey$scientific_name <- gsub("Digested food", "Animalia", prey$scientific_name)
+
+prey_worms_id <- worrms::wm_records_names(unique(prey$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows()
+prey_worms_id <- filter(prey_worms_id, !(AphiaID %in% c("14775", "1519179", "835292"))) %>% rename(scientific_name = scientificname)
+
+salmondiet_prey_2020 <- left_join(prey, prey_worms_id, by = "scientific_name") %>%
+  select(eventID, 
+        predator,
+        scientificName = scientific_name, 
+        scientificNameID = lsid, 
+        scientificNameAuthorship = authority, 
+        taxonomicStatus = status, 
+        taxonomicRank = rank, 
+        kingdom, phylum, class, order, family, genus, pred_id, prey_id) %>%
+  mutate(basisOfRecord = "HumanObservation") %>%
+  mutate(occurrenceStatus = "present",
+         occurrenceID = paste(eventID, pred_id, sep = ":"),
+         occurrenceID = paste(occurrenceID, prey_id, sep = "-")) %>%
+  select(-prey_id)
+```
+
+Finally, we combine the two occurrence tables, and add `associatedTaxa` and `associatedOccurrence` to the Occurrence extension, and save locally and in GoogleDrive. 
+
+``` {r combine occurrence tables, eval = FALSE}
+diet2020_occ <- full_join(predator_occ, salmondiet_prey_2020)
+
+# See if there are any duplicates in occurrenceID:
+duplicates <- diet2020_occ %>% janitor::get_dupes(occurrenceID) 
+
+# To reorder the eventID, use the following code:
+order <- stringr::str_sort(diet2020_occ$occurrenceID, numeric=TRUE)
+diet2020_occ <- diet2020_occ[match(order, diet2020_occ$occurrenceID),]
+diet2020_occ <- diet2020_occ %>%
+  mutate(associatedTaxa = ifelse(grepl("pr", diet2020_occ$occurrenceID), 
+                          paste('"prey of"',  " : ", '"',diet2020_occ$predator,'"', sep = ""), NA),
+         associatedOccurrence = ifelse(grepl("-pr", diet2020_occ$occurrenceID), 
+                                       paste('"prey of"', " : ", '"', diet2020_occ$eventID, ":", diet2020_occ$predator, ":",
+                                             diet2020_occ$pred_id, "-p", '"', sep = ""), ""))
+
+diet2020_occ <- diet2020_occ %>%
+  select(eventID, occurrenceID, occurrenceStatus, scientificName, scientificNameID, organismQuantity, organismQuantityType,
+         scientificNameAuthorship, taxonomicRank, taxonomicStatus, kingdom, phylum, class, order, family, genus,
+         basisOfRecord, associatedTaxa, associatedOccurrence)
+
+# Make sure the folder path exists already (e.g. ./Salmon Diet/tidy_data)
+write_csv(diet2020_occ, here("standardized_data", "diet2020_occ.csv"))
+```
+
+Furthermore, we create a `resourceRelationship` extension, and save locally. We do this to further the understanding of data users that the taxonomic occurrences they find in the Occurrence extension reflect both salmon caught _and_ the prey found in their stomachs. 
+
+``` {r salmondiet_resourceRelationship, eval = FALSE}
+salmondiet_resourceRelationship <- diet2020_occ %>%
+  select(occurrenceID) %>%
+  mutate(relatedResourceID = ifelse(grepl("-pr", diet2020_occ$occurrenceID), diet2020_occ$occurrenceID, NA),
+         resourceID = ifelse(grepl("-pr", diet2020_occ$occurrenceID), gsub("pr.*", "p", diet2020_occ$occurrenceID), NA),
+         relationshipOfResource = ifelse(!is.na(relatedResourceID), "located within", NA)) %>%
+  drop_na() %>%
+  mutate(resourceRelationshipID = paste(resourceID, "rr", sep = ":"),
+         ID = sprintf("%03d", row_number()),
+         resourceRelationshipID = paste(resourceRelationshipID, ID, sep = "-")) %>%
+  select(resourceRelationshipID, resourceID, relationshipOfResource, relatedResourceID)
+
+write_csv(salmondiet_resourceRelationship, here("standardized_data", "salmondiet_2020_resourceRelationship.csv"))
+```
