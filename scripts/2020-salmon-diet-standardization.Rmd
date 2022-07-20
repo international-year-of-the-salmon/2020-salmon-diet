@@ -120,7 +120,7 @@ prey$scientific_name <- gsub("Ova pisces", "Pisces", prey$scientific_name)
 prey$scientific_name <- gsub("Pisces p/p", "Pisces", prey$scientific_name)
 prey$scientific_name <- gsub("Zoea brachyura", "Brachyura", prey$scientific_name)
 prey$scientific_name <- gsub("Gonatidae gen. sp. (мол.)", "Gonatidae", prey$scientific_name)
-prey$scientific_name <- gsub("Digested food", "Animalia", prey$scientific_name)
+prey$scientific_name <- gsub("Digested food", "Animalia", prey$scientific_name) # Similar approach to 2019 'digested food'
 
 prey_worms_id <- worrms::wm_records_names(unique(prey$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows()
 prey_worms_id <- filter(prey_worms_id, !(AphiaID %in% c("14775", "1519179", "835292"))) %>% rename(scientific_name = scientificname)
@@ -183,4 +183,107 @@ salmondiet_resourceRelationship <- diet2020_occ %>%
   select(resourceRelationshipID, resourceID, relationshipOfResource, relatedResourceID)
 
 write_csv(salmondiet_resourceRelationship, here("standardized_data", "salmondiet_2020_resourceRelationship.csv"))
+```
+
+# measurementOrFact extension
+
+In our measurementOrFact extension there is information linked to the salmon records (fork length, mass, number of stomachs analyzed, total food mass, GFI and CFI), and information related to the species-specific weight in the stomach content. From conversation with the data provider, we have learned that salmon were grouped in size classes (10cm). Additionally, if the number of stomachs analyzed is greater than 1, the fork length and mass are the _mean_. 
+
+``` {r, eval = FALSE}
+salmon_spp_measurement <- predator %>%
+  select(eventID,
+         pred_id,
+         `Stomachs analyzed`,
+         `Consumer's average weight, g`,
+         `Consumer's average length,cm`,
+         `Number of empty stomachs (fullness score - 0)`,
+         `Number of stomachs with middle fullness (fullness score - 1-2)`,
+         `Number of full stomachs (fullness score - 3-4)`) %>%
+  mutate(occurrenceID = paste(eventID, pred_id, sep = ":"),
+         occurrenceID = paste(occurrenceID, "p", sep = "-")) %>%
+  distinct() %>%
+  pivot_longer(cols = `Stomachs analyzed`:`Number of full stomachs (fullness score - 3-4)`,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  group_by(occurrenceID) %>%
+  mutate(measurementID = paste(occurrenceID, row_number(), sep = "-")) %>%
+  ungroup() %>%
+  mutate(
+    measurementTypeID = case_when(
+    measurementType == "Consumer's average length,cm" ~ " ",
+    measurementType == "Consumer's average weight, g" ~ " ",
+    measurementType == "Number of empty stomachs (fullness score - 0)" ~ " ",
+    measurementType == "Number of stomachs with middle fullness (fullness score - 1-2)" ~ " ",
+    measurementType == "Number of full stomachs (fullness score - 3-4)" ~ " ",
+    measurementType == "Stomachs analyzed" ~ " "),
+         measurementUnit = case_when(
+    measurementType == "Consumer's average length,cm" ~ "centimeter",
+    measurementType == "Consumer's average weight, g" ~ "gram",
+    measurementType == "Number of empty stomachs (fullness score - 0)" ~ "stomachs",
+    measurementType == "Number of stomachs with middle fullness (fullness score - 1-2)" ~ "stomachs",
+    measurementType == "Number of full stomachs (fullness score - 3-4)" ~ "stomachs",
+    measurementType == "Stomachs analyzed" ~ "stomachs"),
+         measurementUnitID = case_when(
+    measurementUnit == "centimeter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULCM/",
+    measurementUnit == "gram" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UGRM/",
+    measurementUnit == "stomachs" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/"))
+
+# To further indicate that some values represent a mean, we include a measurementMethod column:
+salmon_spp_measurement$measurementMethod <- case_when(grepl("average", salmon_spp_measurement$measurementType) ~ "measurementValue represents the average")
+
+# Select all the correct columsn for the eMOF extension: 
+salmon_spp_measurement <- salmon_spp_measurement %>%
+  select(occurrenceID, measurementID, measurementType, measurementTypeID,
+         measurementValue, measurementUnit, measurementUnitID, measurementMethod)
+
+# Write up csv file 
+write_csv(salmon_spp_measurement, here("standardized_data", "salmon_spp_measurement.csv"))
+```
+
+The second measurement Or Fact table will be created for the stomach content of the salmon species examined. The measurements associated to these records are `mass digested prey species`. First we filter out all the entries of species that were not recorded within a stomach (i.e., where measurementValue = NA)
+
+``` {r, eval = FALSE}
+salmon_prey_measurement <- prey %>%
+  select(eventID,
+         pred_id,
+         prey_id,
+         `Prey proportion in the sample, %`,
+         `Digestion level (I) proportion, %`,
+         `Digestion level (II) proportion, %`,
+         `Digestion level (III) proportion, %`,
+         `Digestion level (IV) proportion, %`) %>% # Add `Index of stomach fulness (ISF) for the prey, prodecimilles (o/ооо)`?
+  mutate(occurrenceID = paste(eventID, pred_id, sep = ":"),
+         occurrenceID = paste(occurrenceID, prey_id, sep = "-")) %>%
+  pivot_longer(cols = `Prey proportion in the sample, %`:`Digestion level (IV) proportion, %`,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  group_by(occurrenceID) %>%
+  mutate(measurementID = paste(occurrenceID, row_number(), sep = "-")) %>%
+  ungroup() %>%
+  mutate(measurementTypeID = case_when(
+         measurementType == "Prey proportion in the sample, %" ~ " ",
+         measurementType == "Digestion level (I) proportion, %" ~ " ",
+         measurementType == "Digestion level (II) proportion, %" ~ " ",
+         measurementType == "Digestion level (III) proportion, %" ~ " ",
+         measurementType == "Digestion level (IV) proportion, %" ~ " "), 
+         measurementUnit = "percentage",
+         measurementUnitID = case_when(
+         measurementUnit == "percentage" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPCT/")) %>%
+  select(occurrenceID, measurementID, measurementType, measurementTypeID, 
+         measurementValue, measurementUnit, measurementUnitID)
+
+salmon_prey_measurement$measurementType <- gsub("[[:punct:]]", "", salmon_prey_measurement$measurementType) %>% trimws(which = "right")
+```
+
+Finally, we combine the two eMOF tables into a single eMOF extension, and save locally and on GoogleDrive: 
+
+``` {r emof_all, eval = FALSE}
+IYS2020_salmondiet_emof <- plyr::rbind.fill(salmon_spp_measurement, salmon_prey_measurement)
+
+# To reorder the eventID, use the following code:
+order <- stringr::str_sort(IYS2020_salmondiet_emof$measurementID, numeric=TRUE)
+IYS2020_salmondiet_emof <- IYS2020_salmondiet_emof[match(order, IYS2020_salmondiet_emof$measurementID),]
+
+# Write up csv file and upload to Google Drive folder
+write_csv(IYS2020_salmondiet_emof, here("standardized_data", "IYS2020_salmondiet_emof.csv"))
 ```
