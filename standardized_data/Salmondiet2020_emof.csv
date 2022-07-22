@@ -1420,11 +1420,6 @@ IYS:GoA2020:Stn47:trawl:51-p,IYS:GoA2020:Stn47:trawl:51-p-3,"Consumer's average 
 IYS:GoA2020:Stn47:trawl:51-p,IYS:GoA2020:Stn47:trawl:51-p-4,Number of empty stomachs (fullness score - 0), ,1,stomachs,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/,NA
 IYS:GoA2020:Stn47:trawl:51-p,IYS:GoA2020:Stn47:trawl:51-p-5,Number of stomachs with middle fullness (fullness score - 1-2), ,0,stomachs,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/,NA
 IYS:GoA2020:Stn47:trawl:51-p,IYS:GoA2020:Stn47:trawl:51-p-6,Number of full stomachs (fullness score - 3-4), ,0,stomachs,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/,NA
-IYS:GoA2020:Stn47:trawl:51-pr1,IYS:GoA2020:Stn47:trawl:51-pr1-1,Prey proportion in the sample, ,100,percentage,http://vocab.nerc.ac.uk/collection/P06/current/UPCT/,NA
-IYS:GoA2020:Stn47:trawl:51-pr1,IYS:GoA2020:Stn47:trawl:51-pr1-2,Digestion level I proportion, ,0,percentage,http://vocab.nerc.ac.uk/collection/P06/current/UPCT/,NA
-IYS:GoA2020:Stn47:trawl:51-pr1,IYS:GoA2020:Stn47:trawl:51-pr1-3,Digestion level II proportion, ,0,percentage,http://vocab.nerc.ac.uk/collection/P06/current/UPCT/,NA
-IYS:GoA2020:Stn47:trawl:51-pr1,IYS:GoA2020:Stn47:trawl:51-pr1-4,Digestion level III proportion, ,0,percentage,http://vocab.nerc.ac.uk/collection/P06/current/UPCT/,NA
-IYS:GoA2020:Stn47:trawl:51-pr1,IYS:GoA2020:Stn47:trawl:51-pr1-5,Digestion level IV proportion, ,0,percentage,http://vocab.nerc.ac.uk/collection/P06/current/UPCT/,NA
 IYS:GoA2020:Stn47:trawl:52-p,IYS:GoA2020:Stn47:trawl:52-p-1,Stomachs analyzed, ,2,stomachs,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/,NA
 IYS:GoA2020:Stn47:trawl:52-p,IYS:GoA2020:Stn47:trawl:52-p-2,"Consumer's average weight, g", ,1697,gram,http://vocab.nerc.ac.uk/collection/P06/current/UGRM/,measurementValue represents the average
 IYS:GoA2020:Stn47:trawl:52-p,IYS:GoA2020:Stn47:trawl:52-p-3,"Consumer's average length,cm", ,55.7,centimeter,http://vocab.nerc.ac.uk/collection/P06/current/ULCM/,measurementValue represents the average

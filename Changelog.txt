@@ -1,0 +1,16 @@
+# Changelog
+All notable changes to the FEEDING_GoA_2020 will be documented in this file. This original file will be stored in the 'original_data' folder.
+The IYS2020_Salmon_Diet file is the latest version. 
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2022-07-22
+
+### Added
+
+### Changed
+- In the column 'Prey name': Gonatidae gen. sp. (мол.) is changed to Gonatidae gen. sp.
+- In the column 'Prey name': пустой желудок is changed to 'Empty stomach'
+
+### Removed

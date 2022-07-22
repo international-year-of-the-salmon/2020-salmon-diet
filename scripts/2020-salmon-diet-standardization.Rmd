@@ -14,14 +14,10 @@ library(here)
 Download the file from the Google Drive folder and read-in:
 
 ```{r file download, eval = FALSE}
-drive_download("https://docs.google.com/spreadsheets/d/1ftZOfDo6ApKWiLeo_qe8_9HayqC-biKo/edit#gid=154249752", path = here("original_data", "IYS2020_Salmon_Diet.xlsx"), overwrite = TRUE)
-
-salmondiet2020 <- read_excel(here("original_data", "IYS2020_Salmon_Diet.xlsx"), sheet = "2020-GoA_Feeding")
+salmondiet2020 <- read_excel(here("IYS2020_Salmon_Diet.xlsx"), sheet = "2020-GoA_Feeding")
 ```
 
-First, let's transcribe the 2020 salmon diet data to the 2022 Data Template:
-
-[ ] TO DO: Figure out which stations from GoA2019 and 2020 overlap with zone 4 (the zone that the Shimada covered in 2022), and which stations overlap with zone 3 (the zone that the Franklin and Raw Spirit covered), following the map on the bottom of this webpage: https://yearofthesalmon.org/2022expedition/ 
+First, create the event core: 
 
 ```{r event core, eval = FALSE}
 event <- salmondiet2020 %>%
@@ -51,10 +47,10 @@ salmondiet2020_event <- event %>%
          decimalLatitude, decimalLongitude) %>%
   mutate(geodeticDatum = "WGS84")
 
-write_csv(event, here("standardized_data", "SalmonDiet2020_event.csv"))
+write_csv(salmondiet2020_event, here("standardized_data", "Salmondiet2020_event.csv"))
 ```
 
-First, we create a table for the predator records (salmon). We will create pred_ids as at some stations there are multiple records of a single species. The difference in these records is the size of the salmon, which are grouped by 10cm size class. Each salmon record within a station will have a unique number attached to it. 
+For the occurrence extension data tables, we create a table for the predator records (salmon). We will create pred_ids as at some stations there are multiple records of a single species. The difference in these records is the size of the salmon, which are grouped by 10cm size class. Each salmon record within a station will have a unique number attached to it. 
 
 ``` {r predator occurrence, eval = FALSE}
 predator <- event %>%
@@ -109,7 +105,8 @@ worms_id <- worrms::wm_records_names(unique(prey$scientific_name), marine_only =
 
 no_worms_id <- left_join(prey, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
 
-# What to do with 'пустой желудок' (empty stomach) and 'digested food' (=Animalia)?
+# Remove rows with 'Empty stomach':
+prey <- prey %>% filter(scientific_name != "Empty stomach")
 
 # These species will need to have their names changed in the original dataframe (bongo2020_abun) which we'll do below. I write this out so it is clear which names or species observations have been altered, so this can be verified. 
 prey$scientific_name <- gsub("Hyperia medusarium", "Hyperia medusarum", prey$scientific_name)
@@ -165,7 +162,7 @@ diet2020_occ <- diet2020_occ %>%
          basisOfRecord, associatedTaxa, associatedOccurrence)
 
 # Make sure the folder path exists already (e.g. ./Salmon Diet/tidy_data)
-write_csv(diet2020_occ, here("standardized_data", "diet2020_occ.csv"))
+write_csv(diet2020_occ, here("standardized_data", "Salmondiet2020_occ.csv"))
 ```
 
 Furthermore, we create a `resourceRelationship` extension, and save locally. We do this to further the understanding of data users that the taxonomic occurrences they find in the Occurrence extension reflect both salmon caught _and_ the prey found in their stomachs. 
@@ -182,7 +179,7 @@ salmondiet_resourceRelationship <- diet2020_occ %>%
          resourceRelationshipID = paste(resourceRelationshipID, ID, sep = "-")) %>%
   select(resourceRelationshipID, resourceID, relationshipOfResource, relatedResourceID)
 
-write_csv(salmondiet_resourceRelationship, here("standardized_data", "salmondiet_2020_resourceRelationship.csv"))
+write_csv(salmondiet_resourceRelationship, here("standardized_data", "salmondiet2020_resourceRelationship.csv"))
 ```
 
 # measurementOrFact extension
@@ -235,9 +232,6 @@ salmon_spp_measurement$measurementMethod <- case_when(grepl("average", salmon_sp
 salmon_spp_measurement <- salmon_spp_measurement %>%
   select(occurrenceID, measurementID, measurementType, measurementTypeID,
          measurementValue, measurementUnit, measurementUnitID, measurementMethod)
-
-# Write up csv file 
-write_csv(salmon_spp_measurement, here("standardized_data", "salmon_spp_measurement.csv"))
 ```
 
 The second measurement Or Fact table will be created for the stomach content of the salmon species examined. The measurements associated to these records are `mass digested prey species`. First we filter out all the entries of species that were not recorded within a stomach (i.e., where measurementValue = NA)
@@ -285,5 +279,5 @@ order <- stringr::str_sort(IYS2020_salmondiet_emof$measurementID, numeric=TRUE)
 IYS2020_salmondiet_emof <- IYS2020_salmondiet_emof[match(order, IYS2020_salmondiet_emof$measurementID),]
 
 # Write up csv file and upload to Google Drive folder
-write_csv(IYS2020_salmondiet_emof, here("standardized_data", "IYS2020_salmondiet_emof.csv"))
+write_csv(IYS2020_salmondiet_emof, here("standardized_data", "Salmondiet2020_emof.csv"))
 ```
