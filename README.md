@@ -2,6 +2,8 @@
 
 🙋 Welcome to the repository for the salmon diet data collected in the Gulf of Alaska in 2020 as part of the International Year of the Salmon High Seas Expedition.
 
+🤖 See the metadata record for this dataset here: https://doi.org/10.21966/w2ht-qn97
+
 🐟 The repository is structured as follows: 
   * `original_data` contains processed data files that have been sent to the IYS Data Scientists that have not been formatted to the IYS Data Template.
   * `standardized_data` contains the standardized data tables as they will be published to OBIS or ERDDAP. 
